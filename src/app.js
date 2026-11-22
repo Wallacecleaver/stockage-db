@@ -3,11 +3,12 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const zlib = require('zlib');
 const { Readable } = require('stream');
 const { version: APP_VERSION } = require('../package.json');
 const config = require('./config');
 const store = require('./db');
-const { HTML: ADMIN_HTML } = require('./admin');
+const { pickVariant: pickAdminVariant } = require('./admin');
 const settings = require('./settings');
 const log = require('./log');
 const federation = require('./federation');
@@ -30,7 +31,33 @@ const { safeFetch, assertSafeUrlSync, securityHeaders, rateLimit } = require('./
 
 const app = express();
 app.disable('x-powered-by');
+// Aucune réponse de l'API n'est mise en cache (no-store) : inutile de hacher chaque corps JSON pour fabriquer un ETag.
+app.set('etag', false);
 app.use(securityHeaders);
+
+// Compression gzip des grosses réponses JSON (dashboard, export, recherche) sans dépendance : ~50 Ko → ~8 Ko.
+// Les petites réponses (API trailers ≈ 400 o) restent brutes : la compression coûterait plus cher qu'elle ne rapporte.
+const GZIP_MIN_BYTES = 1024;
+function jsonGzip(req, res, next) {
+  if (req.method === 'HEAD' || !/(^|[\s,])gzip(\s*;|\s*,|$)/i.test(String(req.headers['accept-encoding'] || ''))) return next();
+  const plainJson = res.json.bind(res);
+  res.json = (body) => {
+    let text;
+    try { text = JSON.stringify(body); } catch { return plainJson(body); }
+    if (typeof text !== 'string' || text.length < GZIP_MIN_BYTES || res.headersSent) return plainJson(body);
+    zlib.gzip(text, { level: 5 }, (err, buf) => {
+      if (res.headersSent || res.writableEnded || res.destroyed) return;
+      res.vary('Accept-Encoding');
+      res.set('Content-Type', 'application/json; charset=utf-8');
+      if (err) { res.set('Content-Length', String(Buffer.byteLength(text))); return res.end(text); }
+      res.set({ 'Content-Encoding': 'gzip', 'Content-Length': String(buf.length) });
+      res.end(buf);
+    });
+    return res;
+  };
+  next();
+}
+app.use(['/api', '/admin/api'], jsonGzip);
 app.use(express.json({ limit: '64kb' }));
 // Derrière Caddy/Nginx : TRUST_PROXY_HOPS=1 donne req.ip = IP réelle du client.
 // 'loopback' = comportement historique (l'en-tête n'est lu que si le pair est local).
@@ -433,7 +460,16 @@ app.get('/admin/api/backup.db', auth, wrap(async (_req, res) => {
   }
 }));
 
-app.get('/admin', (_req, res) => { res.set('cache-control', 'no-store'); res.type('html').send(ADMIN_HTML); });
+// Page du dashboard : Brotli/gzip précalculés au démarrage + ETag (304 quand la page n'a pas changé). Elle ne contient aucun secret.
+app.get('/admin', (req, res) => {
+  const v = pickAdminVariant(req.headers['accept-encoding']);
+  res.set({ 'Cache-Control': 'no-cache', ETag: v.etag, 'Content-Type': 'text/html; charset=utf-8' });
+  res.vary('Accept-Encoding');
+  if (req.fresh) return res.status(304).end();
+  if (v.encoding) res.set('Content-Encoding', v.encoding);
+  res.set('Content-Length', String(v.body.length));
+  res.end(v.body);
+});
 app.get('/admin/api/summary', auth, wrap(async (_req, res) => {
   res.set('cache-control', 'no-store');
   const hlsStats = await hls.cacheStats();
@@ -464,6 +500,7 @@ app.get('/admin/api/summary', auth, wrap(async (_req, res) => {
       search: 'JustWatch',
       appletv: !!config.appletvEnabled,
       ffmpeg: hls.ffmpegAvailable(),
+      ffprobe: quality.available(),
       resolve: !!(config.resolveEnabled && config.tmdbKey),
       upstream: config.upstreamUrl || '',
       apiOpen: apiIsOpen(),
@@ -501,7 +538,7 @@ app.post('/admin/sync', auth, async (_req, res) => {
   try {
     log.info('admin', 'Synchronisation manuelle lancée');
     const [added, recent] = await Promise.all([syncCatalog(), syncRecent()]);
-    const linking = store.stats().unlinked > 0 ? link.start({}) : link.status();
+    const linking = store.countUnlinked() > 0 ? link.start({}) : link.status();
     res.json({ added, recent, link: linking });
   } catch (e) {
     log.error('admin', `Synchronisation échouée : ${e.message}`);
@@ -527,6 +564,18 @@ app.post('/admin/netflix-ids/stop', auth, (_req, res) => {
   const st = link.stop();
   log.warn('link', 'Arrêt demandé depuis le dashboard', { done: st.done, total: st.total });
   res.json(st);
+});
+// État de tous les jobs de fond en UNE requête : le dashboard n'en fait plus cinq toutes les 2,5 s.
+app.get('/admin/api/jobs', auth, (_req, res) => {
+  res.set('cache-control', 'no-store');
+  const jobs = {
+    harvest: harvest.status(),
+    netflixTrailers: netflixTrailers.status(),
+    appletv: appletv.status(),
+    link: link.status(),
+    vf: vf.status(),
+  };
+  res.json({ ...jobs, anyRunning: Object.values(jobs).some((j) => j && j.running) });
 });
 // Moissonnage complet du catalogue Netflix (JustWatch) : statut, lancement (tout / dernières sorties), arrêt.
 app.get('/admin/api/harvest', auth, (_req, res) => {
@@ -870,8 +919,11 @@ app.post('/admin/api/logs/clear', auth, (_req, res) => {
   res.json({ ok: true, removed });
 });
 // Sonde de santé : volontairement minimale (pas d'inventaire des sources ni des erreurs).
+// Elle ne passe PAS par store.stats() : ces ~25 compteurs bloquaient le serveur ~100 ms (40 000 fiches) après chaque écriture,
+// et le HEALTHCHECK Docker / l'orchestrateur appellent cette route en permanence. Un COUNT(*) simple suffit.
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, version: APP_VERSION, uptime: Math.round(process.uptime()), titles: store.stats().total });
+  res.set('cache-control', 'no-store');
+  res.json({ ok: true, version: APP_VERSION, uptime: Math.round(process.uptime()), titles: store.count() });
 });
 
 // ---- Logique partagée de l'API de fédération (/api/trailers + batch + console interactive du dashboard) ----
@@ -1769,7 +1821,7 @@ async function serveHls(req, res, url) {
 async function trailerHandler(req, res) {
   const nid = req.params.nid;
   const idx = Number(req.params.idx);
-  console.log(`[trailer] ${req.method} ${nid}/${idx}${req.headers.range ? ' ' + req.headers.range : ''}`);
+  if (config.debugRelay) console.log(`[trailer] ${req.method} ${nid}/${idx}${req.headers.range ? ' ' + req.headers.range : ''}`);
   const t = store.findByNetflixId(nid)?.trailers?.[idx];
   if (!t) return res.status(404).send('bande-annonce inconnue');
   try {
@@ -1799,7 +1851,7 @@ async function appleTrailerHandler(req, res) {
   const idx = Number(req.params.idx);
   const t = store.getTitle(id)?.appletv?.[idx];
   if (!t || !t.url) return res.status(404).send('bande-annonce Apple TV inconnue');
-  console.log(`[apple] ${req.method} ${id}/${idx}${req.headers.range ? ' ' + req.headers.range : ''}`);
+  if (config.debugRelay) console.log(`[apple] ${req.method} ${id}/${idx}${req.headers.range ? ' ' + req.headers.range : ''}`);
   try {
     if (hls.isHls(t.url)) return await serveHls(req, res, t.url);
     return await relayVideo(req, res, t.url);          // trailer Apple déjà en MP4 : relais direct

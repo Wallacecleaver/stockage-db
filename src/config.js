@@ -60,4 +60,7 @@ module.exports = {
   // Dernier recours quand TMDB ne fournit aucune bande-annonce : recherche YouTube (sans clé API).
   // '0' pour désactiver (YouTube peut bloquer un serveur trop bavard).
   youtubeSearchEnabled: process.env.YOUTUBE_SEARCH === '0' ? '0' : '1',
+  // Journal console de chaque lecture (une ligne par requête, donc une par déplacement dans la vidéo) : désactivé par défaut,
+  // les erreurs de relais restent toujours journalisées. DEBUG_RELAY=1 pour le réactiver.
+  debugRelay: process.env.DEBUG_RELAY === '1',
 };

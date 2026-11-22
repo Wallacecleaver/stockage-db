@@ -1042,7 +1042,7 @@
     </div>
 
     <p style="margin:16px 0 18px;color:var(--muted);font-size:13px">
-      Console d'administration du stockage multi-sources (Netflix, Apple TV+, liens directs), du relais vidéo MP4/HLS et de l'API de fédération.
+      Console d'administration du stockage multi-sources (Netflix, Apple TV+, liens directs), du relais vidéo MP4/HLS et de l'API universelle.
     </p>
 
     <form id="loginForm">
@@ -1081,7 +1081,7 @@
             <div class="brand-sub"><span>DASHBOARD</span><span class="version-pill" id="ver">v__APP_VERSION__</span></div>
           </div>
         </div>
-        <p class="sidebar-tagline">Stockage de bandes-annonces, relais MP4/HLS &amp; API de fédération.</p>
+        <p class="sidebar-tagline">Stockage de bandes-annonces, relais MP4/HLS &amp; API universelle.</p>
       </div>
 
       <div class="nav-group-label">Exploitation</div>
@@ -1178,7 +1178,7 @@
           <div class="page-head">
             <div>
               <h1 class="page-title">Vue d'ensemble</h1>
-              <p class="page-desc">Supervision du stockage multi-sources, du relais MP4/HLS, de l'API de fédération et des jobs d'enrichissement.</p>
+              <p class="page-desc">Supervision du stockage multi-sources, du relais MP4/HLS, de l'API universelle et des jobs d'enrichissement.</p>
             </div>
             <div class="head-actions">
               <button type="button" class="btn-sm" data-jump-tab="streams">▶ Tester un flux</button>
@@ -1319,7 +1319,7 @@
                 <div class="job-top">
                   <div>
                     <div class="job-name">Identifiants IMDb / TMDB &amp; VF <span id="vfState" class="badge">Au repos</span></div>
-                    <div class="job-desc" id="vfText">Complète l'ID IMDb (requis par l'API de fédération), les affiches et le repli YouTube VF.</div>
+                    <div class="job-desc" id="vfText">Complète l'ID IMDb (requis par l'API universelle), les affiches et le repli YouTube VF.</div>
                   </div>
                   <div class="job-actions">
                     <select id="vfLimit" class="batch-sel">
@@ -1341,7 +1341,7 @@
             <div class="card" style="margin-bottom:0">
               <div class="card-head">
                 <h2 class="card-title">Derniers appels API (<span class="mono">/api/*</span>)</h2>
-                <button type="button" class="btn-xs" data-jump-tab="api">Ouvrir Studio API →</button>
+                <button type="button" class="btn-xs" data-jump-tab="api">Ouvrir API &amp; Connexion →</button>
               </div>
               <div id="recentFedBox" class="muted" style="font-size:12.5px">Aucun appel récent enregistré.</div>
             </div>
@@ -1760,7 +1760,7 @@
               <div class="ep-stack">
                 <div class="ep-item">
                   <div style="min-width:0">
-                    <div class="ep-kicker">URL de base du serveur (Addons / Fédération)</div>
+                    <div class="ep-kicker">URL de base du serveur (addons, instances, apps)</div>
                     <div class="ep-url green" id="epBaseVal"></div>
                     <div class="ep-note">Les instances compatibles ajoutent automatiquement <span class="mono">/api/v1</span></div>
                   </div>
@@ -1973,7 +1973,7 @@
           <div class="page-head">
             <div>
               <h1 class="page-title">Journal d'événements</h1>
-              <p class="page-desc">Historique persistant des 2 000 derniers événements : appels de fédération, conversions HLS, relais vidéo, moissonnage et sécurité.</p>
+              <p class="page-desc">Historique persistant des 2 000 derniers événements : appels API, conversions HLS, relais vidéo, moissonnage et sécurité.</p>
             </div>
             <div class="head-actions">
               <label class="btn btn-sm" style="cursor:pointer">
@@ -2517,6 +2517,7 @@
   async function loadSummary() {
     if (!token) return;
     const sum = await api('/admin/api/summary');
+    lastSummaryAt = Date.now();
     renderSummary(sum);
   }
 
@@ -2597,13 +2598,16 @@
     // Health strip
     const pills = [
       src.apiOpen
-        ? { dot: 'warn', label: 'API Fédération', val: 'Ouverte sans clé' }
+        ? { dot: 'warn', label: 'API universelle', val: 'Ouverte sans clé' }
         : src.apiHasKey
-          ? { dot: 'ok', label: 'API Fédération', val: `Protégée (${pl(keyCount, 'clé')})` }
-          : { dot: 'warn', label: 'API Fédération', val: 'Désactivée (0 clé)' },
+          ? { dot: 'ok', label: 'API universelle', val: `Protégée (${pl(keyCount, 'clé')})` }
+          : { dot: 'warn', label: 'API universelle', val: 'Désactivée (0 clé)' },
       src.ffmpeg
         ? { dot: 'ok', label: 'Relais HLS (ffmpeg)', val: 'Audio + vidéo MP4' }
         : { dot: 'warn', label: 'Relais HLS (ffmpeg)', val: 'Absent (HLS limité)' },
+      src.ffprobe
+        ? { dot: 'ok', label: 'Analyse qualité (ffprobe)', val: 'Disponible' }
+        : { dot: 'warn', label: 'Analyse qualité (ffprobe)', val: 'Absent (onglet Qualité limité)' },
       src.appletv
         ? { dot: 'ok', label: 'Apple TV+', val: 'Activé' }
         : { dot: 'off', label: 'Apple TV+', val: 'Désactivé' },
@@ -2666,7 +2670,7 @@
         foot: `${hlsUsedMB.toFixed(1).replace('.', ',')} Mo / ${fmtInt(hls.maxMB)} Mo max (${hls.cacheDays} j)`,
       },
       {
-        label: 'Trafic & Fédération API',
+        label: 'Trafic API',
         val: pl(m.totalCalls || 0, 'appel'),
         foot: m.trailersCalls ? `Taux MP4 : ${m.hitRate ?? 0} % · Latence moy. ${m.avgLatencyMs || 0} ms` : `${src.apiOpen ? 'API ouverte' : pl(keyCount, 'clé active', 'clés actives')}`,
       },
@@ -2704,16 +2708,32 @@
   }
 
   // ---- Background Pipelines Polling ----
+  // Sondage adaptatif : 2,5 s tant qu'un job tourne, 20 s au repos, aucun appel quand l'onglet du navigateur est masqué
+  // (avant : 5 requêtes toutes les 2,5 s en permanence, même sans job actif).
+  const POLL_RUNNING_MS = 2500;
+  const POLL_IDLE_MS = 20000;
+  const SUMMARY_WHILE_RUNNING_MS = 8000;
+  let jobsRunning = false;
+  let lastSummaryAt = 0;
+  function schedulePoll(delay) {
+    clearTimeout(jobTimer);
+    if (!token) return;
+    jobTimer = setTimeout(async () => {
+      if (activeTab === 'overview' && !document.hidden) await pollJobs();   // pollJobs replanifie le prochain passage
+      else schedulePoll(POLL_IDLE_MS);
+    }, delay === undefined ? (jobsRunning ? POLL_RUNNING_MS : POLL_IDLE_MS) : delay);
+  }
+
   async function pollJobs() {
     if (!token || activeTab !== 'overview') return;
     try {
-      const [hv, nt, ap, lk, vfSt] = await Promise.all([
-        api('/admin/api/harvest'),
-        api('/admin/api/netflix-trailers'),
-        api('/admin/api/appletv'),
-        api('/admin/api/netflix-ids'),
-        api('/admin/api/vf'),
-      ]);
+      const jobs = await api('/admin/api/jobs');
+      const hv = jobs.harvest || {};
+      const nt = jobs.netflixTrailers || {};
+      const ap = jobs.appletv || {};
+      const lk = jobs.link || {};
+      const vfSt = jobs.vf || {};
+      jobsRunning = !!jobs.anyRunning;
       const s = (summaryData && summaryData.stats) || {};
 
       // Harvest
@@ -2775,13 +2795,13 @@
       $('vfStopBtn').classList.toggle('hide', !vfSt.running);
       $('vfText').textContent = vfSt.running
         ? `TMDB : ${vfSt.current ? vfSt.current.name : '…'} (${fmtInt(vfSt.matched)} trouvés)`
-        : `${fmtInt(s.withImdb || 0)} fiches possèdent un ID IMDb (prêtes pour l'API de fédération).`;
+        : `${fmtInt(s.withImdb || 0)} fiches possèdent un ID IMDb (prêtes pour l'API universelle).`;
       renderJobErrors('vfErrors', vfSt.errors);
 
-      if (hv.running || nt.running || ap.running || lk.running || vfSt.running) {
-        loadSummary().catch(() => {});
-      }
-    } catch {}
+      // Les compteurs du catalogue ne sont rafraîchis que toutes les 8 s pendant un job (ils coûtent une requête lourde côté serveur).
+      if (jobsRunning && Date.now() - lastSummaryAt > SUMMARY_WHILE_RUNNING_MS) loadSummary().catch(() => {});
+    } catch { /* serveur injoignable : on réessaie au prochain passage */ }
+    finally { schedulePoll(); }
   }
 
   function renderJobErrors(elId, errs) {
@@ -4344,10 +4364,14 @@
   // ---- Timers & Boot ----
   function startTimers() {
     stopTimers();
-    jobTimer = setInterval(() => { if (token && activeTab === 'overview') pollJobs(); }, 2500);
+    schedulePoll(POLL_RUNNING_MS);
   }
+  // Retour sur l'onglet du navigateur : rafraîchit tout de suite au lieu d'attendre le prochain passage.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && token && activeTab === 'overview') pollJobs();
+  });
   function stopTimers() {
-    clearInterval(jobTimer);
+    clearTimeout(jobTimer);
     clearInterval(logTailTimer);
     jobTimer = null;
     logTailTimer = null;

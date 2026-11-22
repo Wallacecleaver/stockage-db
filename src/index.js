@@ -9,7 +9,7 @@ const { syncCatalog, syncRecent } = require('./sync');
 process.on('unhandledRejection', (e) => { console.error('[unhandledRejection]', e); log.error('process', `Promesse rejetée : ${e && e.message || e}`); });
 
 // Associe en arrière-plan les titres non liés à leur ID Netflix (même sans clé TMDB).
-const kickLink = () => { if (store.stats().unlinked > 0 && !link.status().running) link.start({}); };
+const kickLink = () => { if (store.countUnlinked() > 0 && !link.status().running) link.start({}); };
 
 const server = app.listen(config.port, () => {
   log.info('startup', `Serveur API démarré (port ${config.port}, base ${config.dbPath})`);

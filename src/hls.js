@@ -281,6 +281,7 @@ async function build(url, file, metaFile) {
     duration: res.duration || null, height: chosen?.height || null, codecs: chosen?.codecs || null, tracks,
   };
   await fsp.writeFile(metaFile, JSON.stringify(meta));
+  statsMemo = null;
   const sound = tracks === 2 ? ` (avec son${audio?.name ? ` ${audio.name.trim()}` : ''})` : audio ? ' (sans son : ffmpeg absent ou muxage échoué)' : '';
   log.info('hls', `Bande-annonce convertie en MP4${sound} : ${Math.round(res.bytes / 1048576)} Mo, ${Math.round(res.duration || 0)} s`, { host: hostOf(url) });
   return meta;
@@ -368,8 +369,18 @@ function prefetch(url) {
  */
 const canServe = (url) => !isHls(url) || !!ffmpeg();
 
-/** Statistiques du cache disque HLS pour le dashboard (fichiers convertis, volume utilisé, plafond). */
+/**
+ * Statistiques du cache disque HLS pour le dashboard (fichiers convertis, volume utilisé, plafond).
+ * Mises en cache 10 s : le dashboard les redemande à chaque rafraîchissement (readdir + un stat() par MP4).
+ */
+let statsMemo = null;
 async function cacheStats() {
+  if (statsMemo && Date.now() - statsMemo.at < 10_000 && statsMemo.inflight === inflight.size) return statsMemo.value;
+  const value = await computeCacheStats();
+  statsMemo = { at: Date.now(), value, inflight: inflight.size };
+  return value;
+}
+async function computeCacheStats() {
   const dir = path.resolve(config.hlsCacheDir);
   let names = [];
   try { names = await fsp.readdir(dir); } catch {
@@ -389,6 +400,7 @@ async function cacheStats() {
 
 /** Purge les MP4/métadonnées HLS mis en cache sur disque. */
 async function clearCache() {
+  statsMemo = null;
   const dir = path.resolve(config.hlsCacheDir);
   let names = [];
   try { names = await fsp.readdir(dir); } catch { return { removed: 0, bytes: 0 }; }

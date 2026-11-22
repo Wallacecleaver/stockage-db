@@ -21,6 +21,8 @@ db.pragma('temp_store = MEMORY');
 db.pragma('cache_size = -16000');
 db.pragma('foreign_keys = ON');
 db.pragma('busy_timeout = 5000');
+db.pragma('mmap_size = 268435456');          // lectures SQLite via mmap (jusqu'à 256 Mo) : moins de copies sur un gros catalogue
+db.pragma('journal_size_limit = 67108864');  // le fichier -wal ne reste pas gonflé après un gros moissonnage (64 Mo max)
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS titles (
@@ -182,8 +184,13 @@ function upsertTitle(t) {
   upsertSql.run(row);
 }
 
-const parse = (r) => r && ({ ...r, genres: JSON.parse(r.genres_json || '[]'), cast: JSON.parse(r.cast_json || '[]'),
-  extra: JSON.parse(r.extra_json || '{}'), trailers: JSON.parse(r.trailers_json || '[]'), appletv: JSON.parse(r.appletv_json || '[]') });
+// JSON tolérant : une colonne corrompue donne la valeur par défaut au lieu de faire échouer toute la liste / l'API.
+const safeJson = (txt, fallback) => {
+  if (!txt) return fallback;
+  try { return JSON.parse(txt); } catch { return fallback; }
+};
+const parse = (r) => r && ({ ...r, genres: safeJson(r.genres_json, []), cast: safeJson(r.cast_json, []),
+  extra: safeJson(r.extra_json, {}), trailers: safeJson(r.trailers_json, []), appletv: safeJson(r.appletv_json, []) });
 
 const getTitle = (id) => parse(db.prepare('SELECT * FROM titles WHERE id = ?').get(id));
 const getEpisodes = (id) => db.prepare('SELECT * FROM episodes WHERE title_id = ? ORDER BY season, episode').all(id);
@@ -403,6 +410,12 @@ function computeStats() {
   };
 }
 
+/**
+ * Nombre de fiches sans ID Netflix à lier. Requête légère : sert au démarrage et à la synchro sans recalculer
+ * les ~25 compteurs de stats() (≈ 100 ms bloquants sur 40 000 fiches).
+ */
+const countUnlinked = () => db.prepare(`SELECT COUNT(*) c FROM titles WHERE ${unlinkedWhere}`).get({ before: Date.now() - 30 * 86400000 }).c;
+
 /** Supprime une fiche (les épisodes partent avec : ON DELETE CASCADE). */
 function deleteTitle(id) {
   invalidateStats();
@@ -603,7 +616,7 @@ function optimizeDb() {
   return { ok: true, prunedLookups, bytesBefore, bytesAfter, wal: walPages };
 }
 
-module.exports = { db, upsertTitle, getTitle, getEpisodes, findByTmdb, findByImdbId, findByNetflixId, findByName, getLookup, setLookup, listUnlinked, listLinked, listVfPending,
+module.exports = { db, upsertTitle, getTitle, countUnlinked, getEpisodes, findByTmdb, findByImdbId, findByNetflixId, findByName, getLookup, setLookup, listUnlinked, listLinked, listVfPending,
   listNetflixTrailerPending, deleteNetflixDuplicates, count, replaceEpisodes, deleteDuplicates, listAppletvPending, listTitles, stats,
   allSettings, setSettings, deleteSetting, deleteTitle, resetChecks,
   listApiKeys, getApiKeyById, countApiKeys, countActiveApiKeys, createApiKey, updateApiKey, rotateApiKey, deleteApiKey, findApiKey, recordApiKeyUse, touchApiKey,
