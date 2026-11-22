@@ -3,6 +3,7 @@ const store = require('./db');
 const log = require('./log');
 const app = require('./app');
 const link = require('./link');
+const autopilot = require('./autopilot');
 const { syncCatalog, syncRecent } = require('./sync');
 
 // Un job d'arrière-plan qui échoue ne doit pas faire tomber le serveur (Node ≥ 15 quitte sur une promesse rejetée non gérée).
@@ -17,6 +18,7 @@ const server = app.listen(config.port, () => {
   console.log(`API v1          : ${config.publicUrl}/api/v1/status`);
   console.log(`Relais MP4      : ${config.publicUrl}/trailer/…`);
   setTimeout(kickLink, 5000);                        // reprise éventuelle d'un liage interrompu
+  autopilot.schedule();                              // cycle automatique des dernières sorties (désactivable dans Paramètres)
   if (config.tmdbKey) {
     const full = () => syncCatalog().then((n) => console.log(`[sync] +${n} titres`)).catch((e) => console.warn('[sync]', e.message));
     const recent = () => syncRecent().then((n) => console.log(`[sync] sorties récentes +${n} titres`))
@@ -43,7 +45,7 @@ function shutdown(sig) {
   if (stopping) return;
   stopping = true;
   console.log(`[${sig}] arrêt…`);
-  for (const mod of ['./link', './harvest', './vf', './appletv', './netflix-trailers']) {
+  for (const mod of ['./autopilot', './link', './harvest', './vf', './appletv', './netflix-trailers']) {
     try { require(mod).stop?.(); } catch { /* ignore */ }
   }
   const force = setTimeout(() => process.exit(0), 8000);

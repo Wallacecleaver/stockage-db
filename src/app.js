@@ -9,6 +9,7 @@ const { version: APP_VERSION } = require('../package.json');
 const config = require('./config');
 const store = require('./db');
 const { pickVariant: pickAdminVariant } = require('./admin');
+const autopilot = require('./autopilot');
 const settings = require('./settings');
 const log = require('./log');
 const federation = require('./federation');
@@ -575,8 +576,20 @@ app.get('/admin/api/jobs', auth, (_req, res) => {
     link: link.status(),
     vf: vf.status(),
   };
-  res.json({ ...jobs, anyRunning: Object.values(jobs).some((j) => j && j.running) });
+  const auto = autopilot.status();
+  res.json({ ...jobs, auto, anyRunning: auto.running || Object.values(jobs).some((j) => j && j.running) });
 });
+// Pilote automatique : lancer un cycle maintenant / l'arrêter (le planning se règle dans Paramètres → Automatisation).
+app.post('/admin/auto/run', auth, (_req, res) => {
+  try {
+    const st = autopilot.start({ trigger: 'manual' });
+    log.info('auto', 'Cycle automatique lancé depuis le dashboard');
+    res.json(st);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+app.post('/admin/auto/stop', auth, (_req, res) => { res.json(autopilot.stop()); });
 // Moissonnage complet du catalogue Netflix (JustWatch) : statut, lancement (tout / dernières sorties), arrêt.
 app.get('/admin/api/harvest', auth, (_req, res) => {
   res.set('cache-control', 'no-store');

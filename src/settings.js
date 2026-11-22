@@ -48,6 +48,10 @@ const DEFS = [
   { key: 'HARVEST_COUNTRIES', prop: 'harvestCountries', label: 'Pays moissonnés Netflix / JustWatch (ex. FR,US,GB,CA)', group: 'Synchronisation & Moissonnage', type: 'text', normalize: countryList },
   { key: 'YOUTUBE_SEARCH', prop: 'youtubeSearchEnabled', label: 'Chercher sur YouTube quand TMDB n\'a pas de vidéo (1 = oui, 0 = non)', group: 'Synchronisation & Moissonnage', type: 'select', options: ['1', '0'], bool: true },
 
+  { key: 'AUTO_ENABLED', prop: 'autoEnabled', label: 'Pilote automatique : chercher seul les dernières sorties Netflix / Apple TV+ (1 = oui, 0 = non)', group: 'Automatisation', type: 'select', options: ['1', '0'], bool: true },
+  { key: 'AUTO_EVERY_HOURS', prop: 'autoEveryHours', label: 'Fréquence du cycle automatique (heures)', group: 'Automatisation', type: 'number', min: 1, max: 168 },
+  { key: 'AUTO_BATCH', prop: 'autoBatch', label: 'Fiches traitées par étape et par cycle (limite la durée d\'un cycle)', group: 'Automatisation', type: 'number', min: 20, max: 5000 },
+
   { key: 'API_KEY', prop: 'apiKey', label: 'Clé API héritée (optionnelle, préférer les clés nommées dans Fédération)', group: 'API & Fédération', type: 'password', secret: true, minLength: 16 },
   { key: 'UPSTREAM_URL', prop: 'upstreamUrl', label: 'Instance Stockage DB amont (URL)', group: 'API & Fédération', type: 'text', normalize: stripSlash },
   { key: 'UPSTREAM_API_KEY', prop: 'upstreamApiKey', label: 'Clé API de l\'instance amont', group: 'API & Fédération', type: 'password', secret: true },

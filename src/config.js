@@ -63,4 +63,8 @@ module.exports = {
   // Journal console de chaque lecture (une ligne par requête, donc une par déplacement dans la vidéo) : désactivé par défaut,
   // les erreurs de relais restent toujours journalisées. DEBUG_RELAY=1 pour le réactiver.
   debugRelay: process.env.DEBUG_RELAY === '1',
+  // Pilote automatique : cycle complet (nouveautés → liaison → IMDb/VF → pages Netflix → Apple TV+) à intervalle régulier.
+  autoEnabled: process.env.AUTO_ENABLED !== '0',
+  autoEveryHours: num(process.env.AUTO_EVERY_HOURS, 6),
+  autoBatch: num(process.env.AUTO_BATCH, 300),
 };
