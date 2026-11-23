@@ -26,6 +26,7 @@ const quality = require('./quality');
 const facebook = require('./facebook');
 const hls = require('./hls');
 const aiomDirectRelay = require('./aiom-direct-relay');
+const aiomYoutube = require('./aiom-youtube');
 const { syncCatalog, syncRecent } = require('./sync');
 const { UA } = require('./netflix');
 const { safeFetch, assertSafeUrlSync, securityHeaders, rateLimit } = require('./security');
@@ -1942,6 +1943,25 @@ app.head('/media/:id/:idx.mp4', mediaLimiter, manualTrailerHandler);
 
 // Relais séparé du catalogue : aucune fiche ni entrée manualTrailers n'est modifiée.
 const aiomRelaySecret = process.env.AIOM_DIRECT_RELAY_SECRET || '';
+app.post('/api/v1/aiom-direct/youtube', apiGuard('trailers:write'), wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const id = req.body?.ytId;
+  if (typeof id !== 'string' || !aiomYoutube.videoId.test(id)) {
+    return res.status(400).json({ error: 'Identifiant YouTube invalide' });
+  }
+  const state = await aiomYoutube.requestVideo(id);
+  if (state === 'pending') return res.status(202).json({ pending: true });
+  if (state !== 'ready') return res.status(404).json({ error: 'Bande-annonce YouTube 1080p indisponible' });
+  return res.json({ height: 1080, url: `${resolvePublicBase(req)}/aiom-direct/youtube/${id}.mp4` });
+}));
+
+app.get('/aiom-direct/youtube/:id.mp4', mediaLimiter, wrap(async (req, res) => {
+  const file = await aiomYoutube.ready(req.params.id);
+  if (!file) return res.status(404).end();
+  res.set('Access-Control-Allow-Origin', '*');
+  res.sendFile(file);
+}));
+
 app.post('/api/v1/aiom-direct/hls', apiGuard('trailers:write'), (req, res) => {
   res.set('Cache-Control', 'no-store');
   if (aiomRelaySecret.length < 32 || !hls.ffmpegAvailable()) {

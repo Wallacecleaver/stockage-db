@@ -197,6 +197,12 @@ curl "https://stockage.mondomaine.fr/api/v1/trailers?title=Severance&year=2022&a
 | **Facebook** | `/media/<id>/<n>.mp4` | Colle l'URL d'un reel ou d'une vidéo publique (`facebook.com/reel/…`, `/videos/…`, `fb.watch/…`) dans **Ajouter → lien direct** : la page est relue à chaque lecture pour obtenir le MP4 HD (ou SD), car les liens Facebook expirent en quelques heures | Jusqu'à `720p` selon la vidéo |
 | **YouTube** | Lien externe `ytId` | Repli via TMDB ou recherche VF filtrée (`YOUTUBE_AS_SOURCE=1` pour l'inclure systématiquement) | Jusqu'à `1080p` |
 
+### MP4 YouTube 1080p pour AIOMetadata
+
+Active `AIOM_YOUTUBE_1080_ENABLED=1` pour les vidéos dont l'import et la diffusion sont autorisés. Configure `PUBLIC_URL` avec l'adresse HTTPS du serveur et donne à l'addon une clé nommée avec la permission `trailers:write`. L'image Docker inclut `yt-dlp` et `ffmpeg`. Hors Docker, installe `yt-dlp` avec ses dépendances YouTube, `ffmpeg` et `ffprobe`.
+
+`POST /api/v1/aiom-direct/youtube` accepte `{ "ytId": "…" }`. Il répond `202` pendant la préparation, puis `200` avec l'URL si un MP4 1080p H.264/AAC avec son a été validé. Les fichiers restent dans `data/aiom-youtube` avec un cache de 2 Gio. L'addon peut utiliser ses autres fournisseurs pendant la préparation ou si le 1080p est indisponible.
+
 > **Note sur les DRM** : le serveur ne contourne aucun chiffrement DRM. Les flux protégés (Prime Video, Disney+, Max) ne sont pas relayables ; seules leurs métadonnées et bandes-annonces publiques sont exploitées.
 
 ---
