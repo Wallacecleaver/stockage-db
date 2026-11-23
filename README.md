@@ -199,9 +199,13 @@ curl "https://stockage.mondomaine.fr/api/v1/trailers?title=Severance&year=2022&a
 
 ### MP4 YouTube 1080p pour AIOMetadata
 
-Active `AIOM_YOUTUBE_1080_ENABLED=1` pour les vidéos dont l'import et la diffusion sont autorisés. Configure `PUBLIC_URL` avec l'adresse HTTPS du serveur et donne à l'addon une clé nommée avec la permission `trailers:write`. L'image Docker inclut `yt-dlp` et `ffmpeg`. Hors Docker, installe `yt-dlp` avec ses dépendances YouTube, `ffmpeg` et `ffprobe`.
+Pour les vidéos dont l'import et la diffusion sont autorisés, ouvre **Paramètres & Cache HLS → AIOMetadata** et active **Préparer les bandes-annonces YouTube en MP4 1080p**. Le réglage est enregistré dans SQLite et s'applique sans redémarrage. `AIOM_YOUTUBE_1080_ENABLED=1` dans le `.env` permet aussi de définir la valeur par défaut.
+
+Configure `PUBLIC_URL` avec l'adresse HTTPS du serveur et donne à l'addon une clé nommée avec la permission `trailers:write`. L'image Docker inclut `yt-dlp` et `ffmpeg`. Hors Docker, installe `yt-dlp` avec ses dépendances YouTube, `ffmpeg` et `ffprobe`.
 
 `POST /api/v1/aiom-direct/youtube` accepte `{ "ytId": "…" }`. Il répond `202` pendant la préparation, puis `200` avec l'URL si un MP4 1080p H.264/AAC avec son a été validé. Les fichiers restent dans `data/aiom-youtube` avec un cache de 2 Gio. L'addon peut utiliser ses autres fournisseurs pendant la préparation ou si le 1080p est indisponible.
+
+Pour tester, appelle cette route avec l'en-tête `X-API-Key` et l'identifiant d'une bande-annonce autorisée qui existe en 1080p. Si la réponse vaut `202`, relance le même appel après quelques secondes. Ouvre l'URL renvoyée à `200` et vérifie le son et la lecture. En cas de `404`, consulte le **Journal** en filtrant sur `youtube` et sur l'identifiant de la vidéo.
 
 > **Note sur les DRM** : le serveur ne contourne aucun chiffrement DRM. Les flux protégés (Prime Video, Disney+, Max) ne sont pas relayables ; seules leurs métadonnées et bandes-annonces publiques sont exploitées.
 

@@ -40,6 +40,8 @@ const DEFS = [
   { key: 'HLS_CACHE_DAYS', prop: 'hlsCacheDays', label: 'Durée de conservation du cache MP4 (jours)', group: 'Apple TV & Conversion HLS', type: 'number', min: 1, max: 90 },
   { key: 'HLS_MAX_DISK_MB', prop: 'hlsMaxDiskMB', label: 'Plafond disque du cache HLS (Mo)', group: 'Apple TV & Conversion HLS', type: 'number', min: 100, max: 102400 },
 
+  { key: 'AIOM_YOUTUBE_1080_ENABLED', prop: 'aiomYoutube1080Enabled', label: 'Préparer les bandes-annonces YouTube en MP4 1080p', group: 'AIOMetadata', type: 'select', options: ['1', '0'], bool: true },
+
   { key: 'SYNC_EVERY_HOURS', prop: 'syncEveryHours', label: 'Cycle de synchro TMDB (heures)', group: 'Synchronisation & Moissonnage', type: 'number', min: 1, max: 720, restart: true },
   { key: 'SYNC_PAGES', prop: 'syncPages', label: 'Pages catalogue TMDB complet', group: 'Synchronisation & Moissonnage', type: 'number', min: 1, max: 500 },
   { key: 'CATALOG_PROVIDERS', prop: 'catalogProviders', label: 'Plateformes TMDB (8=Netflix, 337=Apple TV+, 2=Apple TV, 119=Prime, all=tout)', group: 'Synchronisation & Moissonnage', type: 'text' },

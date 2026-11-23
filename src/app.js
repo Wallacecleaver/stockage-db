@@ -1950,6 +1950,7 @@ app.post('/api/v1/aiom-direct/youtube', apiGuard('trailers:write'), wrap(async (
     return res.status(400).json({ error: 'Identifiant YouTube invalide' });
   }
   const state = await aiomYoutube.requestVideo(id);
+  if (state === 'disabled') return res.status(404).json({ error: 'YouTube 1080p désactivé dans les paramètres de Stockage DB' });
   if (state === 'pending') return res.status(202).json({ pending: true });
   if (state !== 'ready') return res.status(404).json({ error: 'Bande-annonce YouTube 1080p indisponible' });
   return res.json({ height: 1080, url: `${resolvePublicBase(req)}/aiom-direct/youtube/${id}.mp4` });

@@ -13,14 +13,22 @@ const retryMs = 30 * 60 * 1000;
 const active = new Set();
 const queue = new Set();
 const failures = new Map();
-const enabled = () => process.env.AIOM_YOUTUBE_1080_ENABLED === '1';
+const enabled = () => config.aiomYoutube1080Enabled;
 let cleanup;
 
 async function ready(id) {
   if (!enabled() || !videoId.test(id)) return null;
   const file = path.join(directory, `${id}.mp4`);
   const stat = await fs.stat(file).catch(() => null);
-  return stat?.isFile() && stat.size > 0 ? file : null;
+  return enabled() && stat?.isFile() && stat.size > 0 ? file : null;
+}
+
+function downloadFailure(error, stderr) {
+  if (error.code === 'ENOENT') return 'yt-dlp absent';
+  if (error.killed) return 'délai de téléchargement dépassé';
+  if (/sign in|confirm you.re not a bot|http error (403|429)/i.test(stderr || '')) return 'accès refusé par YouTube';
+  if (/requested format is not available|no video formats/i.test(stderr || '')) return 'format 1080p indisponible';
+  return 'téléchargement impossible';
 }
 
 async function prune(keep) {
@@ -66,11 +74,11 @@ async function download(id) {
     await new Promise((resolve, reject) => {
       execFile(process.env.YT_DLP_PATH || 'yt-dlp', args,
         { timeout: 90000, killSignal: 'SIGKILL', maxBuffer: 256 * 1024, windowsHide: true },
-        error => error ? reject(error) : resolve());
+        (error, _stdout, stderr) => error ? reject(new Error(downloadFailure(error, stderr))) : resolve());
     });
 
     const candidate = path.join(temporary, 'trailer.mp4');
-    const { size } = await fs.stat(candidate);
+    const { size } = await fs.stat(candidate).catch(() => { throw new Error('aucun MP4 produit'); });
     if (!size || size > maxBytes) throw new Error('taille MP4 hors limite');
     const media = await runFfprobe(candidate, { timeoutMs: 10000 });
     if (media.height !== 1080 || !media.hasAudio || media.vcodec !== 'h264' || media.acodec !== 'aac') {
@@ -78,6 +86,7 @@ async function download(id) {
     }
     const file = path.join(directory, `${id}.mp4`);
     await fs.rename(candidate, file);
+    log.info('youtube', 'Bande-annonce AIOM YouTube 1080p prête', { videoId: id, bytes: size });
     await prune(file).catch(error => log.warn('youtube', `Entretien du cache 1080p : ${error.code || 'échec'}`));
   } finally {
     await fs.rm(temporary, { recursive: true, force: true });
@@ -85,6 +94,10 @@ async function download(id) {
 }
 
 function pump() {
+  if (!enabled()) {
+    queue.clear();
+    return;
+  }
   while (active.size < 2 && queue.size) {
     const id = queue.values().next().value;
     queue.delete(id);
@@ -92,7 +105,7 @@ function pump() {
     download(id).catch(error => {
       failures.set(id, Date.now() + retryMs);
       while (failures.size > 512) failures.delete(failures.keys().next().value);
-      log.warn('youtube', 'Bande-annonce AIOM 1080p indisponible', { videoId: id, code: error.code || 'format' });
+      log.warn('youtube', `Bande-annonce AIOM 1080p indisponible (${error.code || error.message})`, { videoId: id });
     }).finally(() => {
       active.delete(id);
       pump();
@@ -101,8 +114,10 @@ function pump() {
 }
 
 async function requestVideo(id) {
-  if (!enabled() || !videoId.test(id)) return 'unavailable';
+  if (!enabled()) return 'disabled';
+  if (!videoId.test(id)) return 'unavailable';
   if (await ready(id)) return 'ready';
+  if (!enabled()) return 'disabled';
   if (active.has(id) || queue.has(id)) return 'pending';
   if ((failures.get(id) || 0) > Date.now() || queue.size >= 12) return 'unavailable';
   queue.add(id);
