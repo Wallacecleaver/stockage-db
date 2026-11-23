@@ -115,6 +115,11 @@ test('AIOM YouTube refuse de publier un fichier sous 1080p, même si le téléch
   assert.equal((await prepare(id)).status, 404);
   assert.equal((await fetch(base + `/aiom-direct/youtube/${id}.mp4`)).status, 404);
   assert.equal(download.mock.callCount(), 2);
+  const journal = await fetch(`${base}/admin/api/logs?source=youtube&search=${id}`,
+    { headers: { 'x-admin-token': admin } }).then(response => response.json());
+  assert.equal(journal.total, 1);
+  assert.equal(journal.logs[0].meta.videoId, id);
+  assert.match(journal.logs[0].message, /1080p indisponible/);
 });
 
 test('AIOM YouTube peut être désactivé à chaud même si un MP4 a déjà été préparé', async () => {

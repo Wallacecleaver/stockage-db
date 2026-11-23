@@ -585,7 +585,7 @@ function listLogs({ level = '', source = '', search = '', limit = 200, offset = 
   if (source) { where.push('source = @source'); p.source = source; }
   if (search) {
     const escaped = String(search).replace(/[\\%_]/g, (m) => `\\${m}`);
-    where.push("(message LIKE @like ESCAPE '\\' OR source LIKE @like ESCAPE '\\')");
+    where.push("(message LIKE @like ESCAPE '\\' OR source LIKE @like ESCAPE '\\' OR meta LIKE @like ESCAPE '\\')");
     p.like = `%${escaped}%`;
   }
   const cond = where.length ? `WHERE ${where.join(' AND ')}` : '';
